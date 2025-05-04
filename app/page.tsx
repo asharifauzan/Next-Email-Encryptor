@@ -1,30 +1,37 @@
 "use client";
 
-import React, { FormEvent, useState } from "react";
-import EmailForm from "@/components/custom/EmailForm";
+import React, { useState, useTransition } from "react";
+
+// Components
 import CodeBlock from "@/components/custom/CodeBlock";
+import EncryptionStatus from "@/components/custom/EncryptionStatus";
+import ResultLoading from "@/components/custom/ResultLoading";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+
+// Utilities
 import {
-  decryptData,
-  encryptData,
   generateKey,
-  EncryptionSchema,
+  encryptData,
+  decryptData,
+  type EncryptionSchema,
 } from "@/utils/crypto";
 
+type ResponseAPI = {
+  id?: number;
+  name?: string;
+  email?: string;
+  publicKey?: string;
+};
+
 export default function HomePage() {
-  const [email, setEmail] = useState<string>("");
+  const [isPending, startTransition] = useTransition();
+  const [data, setData] = useState<ResponseAPI | null>(null);
   const [encryptedEmailData, setEncryptedEmailData] =
     useState<EncryptionSchema | null>(null);
   const [decryptedEmailData, setDecrypytedEmailData] = useState<string>("");
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    // Validate email is filled
-    if (!email) {
-      alert("Email is required");
-      return;
-    }
-
+  const encryptEmail = async (email: string) => {
     // Generate and get public key
     const key: CryptoKey = await generateKey();
 
@@ -41,44 +48,74 @@ export default function HomePage() {
     setDecrypytedEmailData(decryptedEmail);
   };
 
-  return (
-    <div className="container mx-auto px-4 py-12">
-      <h1 className="mb-12 text-center text-5xl font-bold">
-        Encrypt your email, try it!
-      </h1>
+  const fetchData = () => {
+    startTransition(async () => {
+      const response = await fetch("/api/user");
+      const json = await response.json();
+      setData(json);
 
-      <EmailForm
-        value={email}
-        onChangeEmail={(e) => setEmail(e.target.value)}
-        onReset={() => setEmail("")}
-        onSubmit={handleSubmit}
-      />
+      // Encrypt email and show the status
+      encryptEmail(json.email);
 
-      <div className="space-y-2">
-        {/* Show result of Encrypted Email */}
-        {encryptedEmailData?.encrypted && (
-          <>
-            <h2 className="text-xl font-bold">Encrypted Email:</h2>
-            <CodeBlock>{encryptedEmailData?.encrypted}</CodeBlock>
-          </>
-        )}
+      // Simulate 3s loading
+      await new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(null);
+        }, 3000);
+      });
+    });
+  };
 
-        {/* Show result of Decrypted Email */}
-        {decryptedEmailData && (
-          <>
-            <h2 className="text-xl font-bold">Decrypted Email:</h2>
-            <CodeBlock>{decryptedEmailData}</CodeBlock>
-          </>
-        )}
-
-        {/* Show result of last action */}
-        {encryptedEmailData?.encrypted && decryptedEmailData && (
-          <p className="text-gray-500">
-            Last action {decryptedEmailData} on{" "}
-            <span className="font-bold italic">{new Date().toString()}</span>
-          </p>
-        )}
+  const renderLoading = () => {
+    return (
+      <div className="space-y-8">
+        <ResultLoading />
+        <div className="space-y-2">
+          <ResultLoading />
+          <ResultLoading />
+        </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-12 space-y-8">
+      <div className="flex items-center gap-1.5">
+        <Button type="button" onClick={() => fetchData()} disabled={isPending}>
+          Get User (simulate 3s loading)
+        </Button>
+
+        <p>
+          Or try manual encryption{" "}
+          <Link
+            href="/email-encryptor"
+            target="_blank"
+            className="text-blue-500 hover:text-blue-700"
+          >
+            here
+          </Link>
+        </p>
+      </div>
+
+      {isPending ? (
+        // Render skeleton during fetch api and encrypt an email
+        renderLoading()
+      ) : (
+        // Render result after the loading is finished
+        <>
+          {data && (
+            <div>
+              <h2 className="text-xl font-bold">Response API:</h2>
+              <CodeBlock>{JSON.stringify(data)}</CodeBlock>
+            </div>
+          )}
+
+          <EncryptionStatus
+            encryptedData={encryptedEmailData?.encrypted as string}
+            decryptedData={decryptedEmailData}
+          />
+        </>
+      )}
     </div>
   );
 }
